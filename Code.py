@@ -2,8 +2,7 @@ from lxml import etree
 from datetime import datetime, timedelta
 import os
 from tabulate import tabulate
-#import tkinter as tk
-
+stop_or_route = None
 bus_route_specific = None
 
 def record_lines():
@@ -26,8 +25,37 @@ def record_lines():
 
     return routes, what_file
 
-def record_stops_on_route():
-    print("TBC")
+
+def find_routes_at_stop():
+    line_refs = []
+    
+    chosen_stop = input("What stop? ")
+
+    for file in os.listdir():
+        if file.endswith(".xml"):
+            tree = etree.parse(file)
+            root = tree.getroot()
+
+            for stop in root.iter("{*}AnnotatedStopPointRef"):
+                stop_name = stop.find("{*}CommonName").text
+                if stop_name == chosen_stop:
+                    stop_point_ref = stop.find("{*}StopPointRef").text
+
+                    for jptlr in root.iter("{*}JourneyPatternTimingLink"):
+                        if jptlr.find("{*}From/{*}StopPointRef").text == stop_point_ref:
+                            jptlr_id = jptlr.get("id")
+
+                            for journey in root.iter("{*}VehicleJourney"):
+                                for vehicle_journey_tl in journey.iter("{*}VehicleJourneyTimingLink"):
+                                    if vehicle_journey_tl.find("{*}JourneyPatternTimingLinkRef").text == jptlr_id:
+
+                                        for interval in journey.iter("{*}VehicleJourneyTimingLink"):
+                                            for jptlr in root.iter("{*}JourneyPatternTimingLink"):
+                                                if jptlr.get("id") == jptlr_id:
+                                                    line_ref = journey.find("{*}LineRef").text.split(":")
+                                                    if not line_ref[-1] in line_refs:
+                                                        line_refs.append(line_ref[-1])
+    return line_refs
 
 
 #finds the timetable of the route and prints it
@@ -41,8 +69,9 @@ def find_timetable(root, what_data):
         current_time = datetime.strptime(str(datetime.now())[11:19], "%H:%M:%S")
         
 
-        if what_data == "Next" and departure < current_time:                                                #checks if the current journey has already occurs and skips ahead to the next journey if so
-            continue
+        if what_data == "NEXT":
+            if departure < current_time:                                                                    #checks if the current journey has already occurs and skips ahead to the next journey if so
+                continue
 
         #finds the line reference and checks if it matches what the user inputted
         line_ref = journey.find("{*}LineRef").text.split(":")   
@@ -89,136 +118,40 @@ def find_timetable(root, what_data):
         column.append([stop_name, stop_departure.time()])
         table = tabulate(column, headers = ["Stop", "Time"], tablefmt='orgtbl')
 
-
-
         print(table)
         print(" ")
         print("--------------------------")
         print(" ")
 
-        
 
 
 routes, what_file = record_lines()
 
-what_data = input("Would you like the next buses or all buses? ")
+what_data = input("Would you like the next buses or all buses? ").upper()
+
+while not stop_or_route in ["Stop", "Route"]:
+    stop_or_route = input("Would you like to get the timetable for a stop or a route? ")
+
+
+if stop_or_route == "Stop":
+    bus_routes_specific = find_routes_at_stop()
+    #print(bus_routes_specific)
+
+    for bus_route_specific in bus_routes_specific:
+        tree = etree.parse(what_file[bus_route_specific])
+        root = tree.getroot()
+        find_timetable(root, what_data)
+
 
 #asks for route until a valid route is given
-while not bus_route_specific in routes:
-    bus_route_specific = input("Which bus route do you want the timetable of?").upper()
+if stop_or_route == "Route":
+    while not bus_route_specific in routes:
+        bus_route_specific = input("Which bus route do you want the timetable of?").upper()
+    chosen_stop = "Start"
 
     if not bus_route_specific in routes:
         print("Not a Valid Route, Try Again")
 
-tree = etree.parse(what_file[bus_route_specific])
-root = tree.getroot()
-
-find_timetable(root, what_data)
-
-
-
-
-
-"""
-Want to eventually do:
-user inputs time and date
-returns the services after that time on the correct date
-
-User inputs a stop
-returns routes through that stop then prompts the user to input time and date of when
-"""
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#Future Testing / Plans
-
-#goes above while loop
-"""
-#sets window up
-root = tk.Tk()
-root.geometry("750x250")
-root.configure(background = 'lightblue')
-
-var = tk.StringVar()
-
-#puts heading at the top
-tk.Label(root, text = "Bus Information", background='lightblue').grid(row = 0, column = 0)
-
-#displays the 2 options for what_data
-tk.Label(root, text = "Would you like the next buses or all buses?", background='lightblue').grid(row = 1, column = 0)
-tk.Radiobutton(root, text = "All", background='lightblue', variable = var, value = 1).grid(row = 1, column = 1)
-tk.Radiobutton(root, text = "Next", background='lightblue', variable = var, value = 2).grid(row = 1, column = 2)
-
-
-if var == 1:
-    what_data = "All"
-elif var == 2:
-    what_data = "Next"
-"""
-
-#goes inside while loop
-""""
-tk.Label(root, text="Which Bus Route?", background='lightblue').grid(row = 2, column = 0)
-entry = tk.Entry(root)
-entry.grid(row = 2, column = 1)
-button = tk.Button(root, text= "Submit", command = get_content)
-button.grid(row = 2, column = 2)
-"""
-
-#in functions list
-"""
-def get_content():
-    print(entry.get())
-    print(var.get())
-"""
+    tree = etree.parse(what_file[bus_route_specific])
+    root = tree.getroot()
+    find_timetable(root, what_data)
